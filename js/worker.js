@@ -55,7 +55,9 @@
       headers: headers,
       body: opts.form ? opts.form : (opts.body ? JSON.stringify(opts.body) : undefined),
     }).then(function (res) {
-      if (res.status === 401) { logout(); throw new Error('Session expired — sign in again'); }
+      // A 401 from the login endpoint itself just means wrong credentials —
+      // only treat 401 elsewhere as an expired session and force re-login.
+      if (res.status === 401 && path !== '/api/auth/login') { logout(); throw new Error('Session expired — sign in again'); }
       return res.json().catch(function () { return {}; }).then(function (data) {
         if (!res.ok) throw new Error(data.error || ('Request failed (' + res.status + ')'));
         return data;
