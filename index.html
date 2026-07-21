@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Workers — Continental Auto Parts</title>
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="theme-color" content="#0e1726">
+  <link rel="icon" href="/assets/icons/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/assets/icons/icon-192.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="css/worker.css">
+</head>
+<body>
+  <!-- ======== login ======== -->
+  <section id="login-screen" class="login-screen" hidden>
+    <form id="login-form" class="login-card">
+      <img src="/assets/icons/favicon.svg" alt="" width="52" height="52">
+      <h1>Continental <span>Workers</span></h1>
+      <label>Username
+        <input name="username" autocomplete="username" required>
+      </label>
+      <label>Password
+        <input name="password" type="password" autocomplete="current-password" required>
+      </label>
+      <button type="submit" class="btn btn-primary btn-block">Sign in</button>
+      <p id="login-error" class="form-error" role="alert" hidden></p>
+    </form>
+  </section>
+
+  <!-- ======== app ======== -->
+  <div id="app" hidden>
+    <header class="topbar">
+      <div class="topbar-brand">
+        <img src="/assets/icons/favicon.svg" alt="" width="30" height="30">
+        <div><strong>Continental</strong><span id="worker-name"></span></div>
+      </div>
+      <button id="logout-btn" class="btn btn-ghost btn-xs">Sign out</button>
+    </header>
+
+    <div class="today-bar">
+      <div>
+        <span class="today-label">My sales today</span>
+        <strong id="today-total">0 FCFA</strong>
+      </div>
+      <button id="show-mine" class="btn btn-outline btn-xs">View list</button>
+    </div>
+
+    <main class="content">
+      <div class="inv-stats" id="inv-stats"></div>
+      <div class="tools">
+        <div class="tools-top">
+          <input id="search" type="search" placeholder="Search product, brand, part no…" autocomplete="off">
+          <button id="add-product-btn" class="btn btn-primary btn-xs">＋ Add product</button>
+        </div>
+        <div class="branch-row">
+          <label class="branch-label" for="branch-select">Viewing stock at</label>
+          <select id="branch-select" aria-label="Branch"></select>
+        </div>
+        <div class="chip-row" id="cat-chips"></div>
+        <div class="filter-row">
+          <select id="stock-filter" aria-label="Filter by stock">
+            <option value="">All stock levels</option>
+            <option value="in">In stock</option>
+            <option value="low">Low stock (≤ 5)</option>
+            <option value="out">Out of stock</option>
+          </select>
+          <select id="sort-by" aria-label="Sort products">
+            <option value="name">Sort: Name A–Z</option>
+            <option value="price-low">Price: low → high</option>
+            <option value="price-high">Price: high → low</option>
+            <option value="stock-low">Stock: low first</option>
+            <option value="stock-high">Stock: high first</option>
+          </select>
+        </div>
+      </div>
+      <div id="product-list" class="product-list" aria-live="polite"></div>
+    </main>
+  </div>
+
+  <div id="modal-root"></div>
+  <div id="toast" class="toast" role="status"></div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="js/worker.js"></script>
+</body>
+</html>

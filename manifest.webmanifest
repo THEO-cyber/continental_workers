@@ -1,0 +1,17 @@
+{
+  "name": "Continental Workers",
+  "short_name": "CT Workers",
+  "description": "Record sales and check live stock — Continental Auto Parts staff app.",
+  "id": "/workers/",
+  "start_url": "/workers/",
+  "scope": "/workers/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "theme_color": "#0e1726",
+  "background_color": "#f2f5f9",
+  "icons": [
+    { "src": "/assets/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/assets/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/assets/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
