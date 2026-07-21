@@ -267,7 +267,7 @@
   $('#product-list').addEventListener('click', function (e) {
     var btn = e.target.closest('.sell-btn');
     if (!btn || btn.disabled) return;
-    var id = Number(btn.closest('.p-item').getAttribute('data-id'));
+    var id = btn.closest('.p-item').getAttribute('data-id');
     var product = products.find(function (p) { return p.id === id; });
     if (product) openSellModal(product);
   });
