@@ -1,13 +1,13 @@
 /* Continental Workers — service worker (app shell only; sales always need the network) */
 'use strict';
 
-const CACHE = 'continental-workers-v2';
+const CACHE = 'continental-workers-v3';
 const SHELL = [
-  '/workers/',
-  '/workers/index.html',
-  '/workers/css/worker.css',
-  '/workers/js/worker.js',
-  '/workers/manifest.webmanifest',
+  '/',
+  '/index.html',
+  '/css/worker.css',
+  '/js/worker.js',
+  '/manifest.webmanifest',
   '/assets/icons/favicon.svg',
   '/assets/icons/icon-192.png',
   '/assets/img/part-placeholder.svg',
@@ -28,23 +28,21 @@ self.addEventListener('fetch', (event) => {
   const req = event.request;
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
+  // The API and Socket.IO now live on the backend's own origin (this app is
+  // hosted separately) -- cross-origin requests are never intercepted here,
+  // so live stock/sales data always goes straight to the network.
   if (url.origin !== self.location.origin) return;
-  // Live data always from the network — never serve stale stock or record sales offline.
-  if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/socket.io')) return;
-  if (!url.pathname.startsWith('/workers') && !url.pathname.startsWith('/assets') && !url.pathname.startsWith('/uploads')) return;
 
   event.respondWith((async () => {
     try {
       const fresh = await fetch(req);
-      if (url.pathname.startsWith('/workers') || url.pathname.startsWith('/assets')) {
-        const cache = await caches.open(CACHE);
-        cache.put(req, fresh.clone());
-      }
+      const cache = await caches.open(CACHE);
+      cache.put(req, fresh.clone());
       return fresh;
     } catch {
       const cached = await caches.match(req, { ignoreSearch: true });
       if (cached) return cached;
-      if (req.mode === 'navigate') return caches.match('/workers/index.html');
+      if (req.mode === 'navigate') return caches.match('/index.html');
       throw new Error('offline');
     }
   })());

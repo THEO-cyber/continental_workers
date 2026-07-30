@@ -4,6 +4,9 @@
 
   var TOKEN_KEY = 'continental_worker_token';
   var token = localStorage.getItem(TOKEN_KEY);
+  // Set in index.html — points at the backend when this app is hosted
+  // separately; empty string falls back to same-origin (local/monorepo dev).
+  var API_BASE = (typeof window !== 'undefined' && window.API_BASE) || '';
   var user = null;
   var socket = null;
   var products = [];
@@ -50,14 +53,14 @@
     opts = opts || {};
     var headers = opts.form ? {} : { 'Content-Type': 'application/json' };
     if (token) headers.Authorization = 'Bearer ' + token;
-    return fetch(path, {
+    return fetch(API_BASE + path, {
       method: opts.method || 'GET',
       headers: headers,
       body: opts.form ? opts.form : (opts.body ? JSON.stringify(opts.body) : undefined),
     }).then(function (res) {
       // A 401 from the login endpoint itself just means wrong credentials —
       // only treat 401 elsewhere as an expired session and force re-login.
-      if (res.status === 401 && path !== '/api/auth/login') { logout(); throw new Error('Session expired — sign in again'); }
+      if (res.status === 401 && path !== '/api/auth/login') { logout(); throw new Error('Session expired sign in again'); }
       return res.json().catch(function () { return {}; }).then(function (data) {
         if (!res.ok) throw new Error(data.error || ('Request failed (' + res.status + ')'));
         return data;
@@ -110,7 +113,9 @@
     $('#app').hidden = false;
     $('#worker-name').textContent = user ? user.name : '';
     if (socket) socket.disconnect();
-    socket = io({ auth: { token: token } });
+    socket = API_BASE
+      ? io(API_BASE, { auth: { token: token } })
+      : io({ auth: { token: token } });
     socket.on('catalog:changed', function () {
       clearTimeout(refreshTimer);
       refreshTimer = setTimeout(function () {
@@ -227,7 +232,7 @@
         '<div class="p-right">' +
         '<span class="p-stock ' + stockCls + '">' + esc(stockTxt) + '</span>' +
         (otherBranch
-          ? '<span class="cell-muted" style="font-size:.7rem;text-align:right">View only —<br>visit that branch to sell</span>'
+          ? '<span class="cell-muted" style="font-size:.7rem;text-align:right">View only <br>visit that branch to sell</span>'
           : '<button class="btn btn-xs sell-btn"' + (p.quantity === 0 ? ' disabled' : '') + '>Sell</button>') +
         '</div></div>';
     }).join('') : '<p class="list-empty">No products match these filters.</p>';
@@ -347,7 +352,7 @@
   function openAddProductModal() {
     var modal = openModal(
       '<h2>Add new product</h2>' +
-      '<p class="cell-muted" style="margin:-.4rem 0 .8rem">Added to your branch\'s inventory. Your superadmin reviews it before it appears anywhere — you\'ll see it drop off "Pending" once approved.</p>' +
+      '<p class="cell-muted" style="margin:-.4rem 0 .8rem">Added to your branch\'s inventory. Your superadmin reviews it before it appears anywhere you\'ll see it drop off "Pending" once approved.</p>' +
       '<form id="add-product-form" class="form-grid">' +
       langFieldsWorker('English', 'en') +
       langFieldsWorker('Français', 'fr') +
@@ -386,7 +391,7 @@
       api('/api/admin/products', { method: 'POST', form: form })
         .then(function () {
           closeModal();
-          toast('Submitted — waiting for superadmin approval');
+          toast('Submitted waiting for superadmin approval');
           loadProducts();
         })
         .catch(function (err) {

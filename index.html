@@ -10,6 +10,11 @@
   <link rel="apple-touch-icon" href="/assets/icons/icon-192.png">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="stylesheet" href="css/worker.css">
+  <script>
+    // This app is hosted separately from the API/realtime server — update
+    // this if the backend's URL ever changes (custom domain, etc.).
+    window.API_BASE = "https://continental-backend-yieu.onrender.com";
+  </script>
 </head>
 <body>
   <!-- ======== login ======== -->
@@ -81,7 +86,7 @@
   <div id="modal-root"></div>
   <div id="toast" class="toast" role="status"></div>
 
-  <script src="/socket.io/socket.io.js"></script>
+  <script src="https://continental-backend-yieu.onrender.com/socket.io/socket.io.js"></script>
   <script src="js/worker.js"></script>
 </body>
 </html>
