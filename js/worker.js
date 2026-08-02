@@ -49,6 +49,19 @@
     toastTimer = setTimeout(function () { toastEl.className = 'toast'; }, 3000);
   }
 
+  // Swaps a button's contents for a spinner + label while an async action is
+  // in flight, then restores it — so tapping a button doesn't look like
+  // nothing happened.
+  function withSpinner(btn, label, task) {
+    var original = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="btn-spinner"></span>' + label;
+    return task().finally(function () {
+      btn.disabled = false;
+      btn.innerHTML = original;
+    });
+  }
+
   function api(path, opts) {
     opts = opts || {};
     var headers = opts.form ? {} : { 'Content-Type': 'application/json' };
@@ -95,7 +108,9 @@
     var f = e.target;
     var errEl = $('#login-error');
     errEl.hidden = true;
-    api('/api/auth/login', { method: 'POST', body: { username: f.username.value, password: f.password.value } })
+    withSpinner(f.querySelector('button[type="submit"]'), 'Signing in…', function () {
+      return api('/api/auth/login', { method: 'POST', body: { username: f.username.value, password: f.password.value } });
+    })
       .then(function (data) {
         token = data.token;
         user = data.user;
@@ -323,9 +338,12 @@
 
     $('#sell-form', modal).addEventListener('submit', function (e) {
       e.preventDefault();
+      var f = e.target;
       var quantity = Math.round(Number(qtyInput.value));
       var unitPrice = Math.round(Number(priceInput.value));
-      api('/api/sales', { method: 'POST', body: { product_id: product.id, quantity: quantity, unit_price: unitPrice } })
+      withSpinner(f.querySelector('button[type="submit"]'), 'Recording…', function () {
+        return api('/api/sales', { method: 'POST', body: { product_id: product.id, quantity: quantity, unit_price: unitPrice } });
+      })
         .then(function (res) {
           closeModal();
           toast('✓ Sale recorded: ' + res.sale.quantity + ' × ' + res.sale.product_name + ' — ' + money(res.sale.total));
@@ -388,7 +406,9 @@
       form.append('quantity', f.quantity.value);
       form.append('published', '1');
       if (f.image.files[0]) form.append('image', f.image.files[0]);
-      api('/api/admin/products', { method: 'POST', form: form })
+      withSpinner(f.querySelector('button[type="submit"]'), 'Adding…', function () {
+        return api('/api/admin/products', { method: 'POST', form: form });
+      })
         .then(function () {
           closeModal();
           toast('Submitted waiting for superadmin approval');

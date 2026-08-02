@@ -51,6 +51,13 @@ input { font-family: inherit; }
 .btn-block { width: 100%; }
 .btn-xs { padding: .35rem .7rem; font-size: .8rem; border-radius: 8px; }
 .btn-big { width: 100%; padding: .85rem; font-size: 1.05rem; }
+.btn-spinner {
+  display: inline-block; width: .85em; height: .85em; margin-right: .4em;
+  border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%;
+  vertical-align: -.15em; animation: btn-spin .6s linear infinite; opacity: .8;
+}
+@keyframes btn-spin { to { transform: rotate(360deg); } }
+.btn[disabled] { opacity: .7; cursor: default; pointer-events: none; }
 input[type="text"], input[type="search"], input[type="number"], input[type="password"],
 select, textarea {
   padding: .65rem .85rem; border: 1px solid var(--line); border-radius: 10px; background: #fff; width: 100%; font-size: 1rem;
