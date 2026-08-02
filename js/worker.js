@@ -62,6 +62,41 @@
     });
   }
 
+  // Downscales + re-compresses a photo in the browser before it ever hits
+  // the network — a full-res phone photo (often 3-8MB) is far more data
+  // than a product-catalog image needs, and every byte crosses two hops
+  // (browser -> backend -> Cloudinary). PNG stays PNG (lossless — only
+  // dimension downscaling helps there); everything else becomes JPEG.
+  function compressImage(file, maxDim, quality) {
+    if (!/^image\//.test(file.type)) return Promise.resolve(file);
+    return new Promise(function (resolve) {
+      var url = URL.createObjectURL(file);
+      var img = new Image();
+      img.onload = function () {
+        URL.revokeObjectURL(url);
+        var scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+        var w = Math.round(img.width * scale) || 1;
+        var h = Math.round(img.height * scale) || 1;
+        var canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        var ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, w, h);
+        var outType = file.type === 'image/png' ? 'image/png' : 'image/jpeg';
+        canvas.toBlob(
+          function (blob) { resolve(blob || file); },
+          outType,
+          outType === 'image/jpeg' ? quality : undefined,
+        );
+      };
+      img.onerror = function () {
+        URL.revokeObjectURL(url);
+        resolve(file);
+      };
+      img.src = url;
+    });
+  }
+
   function api(path, opts) {
     opts = opts || {};
     var headers = opts.form ? {} : { 'Content-Type': 'application/json' };
@@ -363,7 +398,7 @@
   function langFieldsWorker(label, prefix) {
     return '<fieldset class="lang-set"><legend>' + label + '</legend>' +
       '<label>Name' + (prefix === 'en' ? ' *' : '') + '<input name="name_' + prefix + '"' + (prefix === 'en' ? ' required' : '') + '></label>' +
-      '<label>Description<textarea name="desc_' + prefix + '"></textarea></label>' +
+      '<label>Description<textarea name="desc_' + prefix + '" maxlength="4000"></textarea></label>' +
       '</fieldset>';
   }
 
@@ -398,16 +433,20 @@
     $('#add-product-form', modal).addEventListener('submit', function (e) {
       e.preventDefault();
       var f = e.target;
-      var form = new FormData();
-      ['name_en', 'name_fr', 'name_zh', 'desc_en', 'desc_fr', 'desc_zh', 'category', 'brand', 'sku'].forEach(function (k) {
-        form.append(k, f[k].value);
-      });
-      form.append('price', f.price.value);
-      form.append('quantity', f.quantity.value);
-      form.append('published', '1');
-      if (f.image.files[0]) form.append('image', f.image.files[0]);
       withSpinner(f.querySelector('button[type="submit"]'), 'Adding…', function () {
-        return api('/api/admin/products', { method: 'POST', form: form });
+        return Promise.resolve(
+          f.image.files[0] ? compressImage(f.image.files[0], 1600, 0.82) : null,
+        ).then(function (image) {
+          var form = new FormData();
+          ['name_en', 'name_fr', 'name_zh', 'desc_en', 'desc_fr', 'desc_zh', 'category', 'brand', 'sku'].forEach(function (k) {
+            form.append(k, f[k].value);
+          });
+          form.append('price', f.price.value);
+          form.append('quantity', f.quantity.value);
+          form.append('published', '1');
+          if (image) form.append('image', image, f.image.files[0].name);
+          return api('/api/admin/products', { method: 'POST', form: form });
+        });
       })
         .then(function () {
           closeModal();
