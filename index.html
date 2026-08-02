@@ -10,11 +10,10 @@
   <link rel="apple-touch-icon" href="/assets/icons/icon-192.png">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="stylesheet" href="css/worker.css">
-  <script>
-    // This app is hosted separately from the API/realtime server — update
-    // this if the backend's URL ever changes (custom domain, etc.).
-    window.API_BASE = "https://continental-backend-yieu.onrender.com";
-  </script>
+  <!-- This app is hosted separately from the API/realtime server. The
+       backend URL lives in this site's Netlify env vars (API_BASE), served
+       at runtime by netlify/functions/config.ts — never hardcoded here. -->
+  <script src="/config.js"></script>
 </head>
 <body>
   <!-- ======== login ======== -->
@@ -86,7 +85,10 @@
   <div id="modal-root"></div>
   <div id="toast" class="toast" role="status"></div>
 
-  <script src="https://continental-backend-yieu.onrender.com/socket.io/socket.io.js"></script>
+  <!-- Loaded from Socket.IO's own CDN rather than the backend, since the
+       library itself isn't tied to which server it'll connect to — the
+       actual connection target (window.API_BASE) is set dynamically. -->
+  <script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
   <script src="js/worker.js"></script>
 </body>
 </html>
