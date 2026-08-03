@@ -41,6 +41,14 @@
     if (p.price_min == null) return '';
     return p.price_min === p.price_max ? money(p.price_min) : money(p.price_min) + ' – ' + money(p.price_max);
   }
+  // A product's aggregate stock can look fine while one specific part number
+  // is genuinely empty (or running low) behind others that still have
+  // stock -- flag those specifically rather than only the product total.
+  function flaggedPartNumbers(p, kind) {
+    return (p.part_numbers || []).filter(function (pn) {
+      return kind === 'out' ? pn.quantity === 0 : pn.quantity > 0 && pn.quantity <= LOW_STOCK;
+    });
+  }
   function timeOf(createdAt) {
     try {
       return new Date(String(createdAt).replace(' ', 'T') + 'Z')
@@ -277,6 +285,15 @@
       var stockCls = p.quantity === 0 ? 'zero' : (p.quantity <= LOW_STOCK ? 'low' : 'ok');
       var stockTxt = p.quantity === 0 ? 'Out of stock' : p.quantity + ' left';
       var otherBranch = showBranch && p.branch_id !== myBranchId;
+      // Aggregate stock can look fine while one specific part number is
+      // genuinely empty behind others -- call that out on the card itself.
+      var outPns = p.quantity > 0 ? flaggedPartNumbers(p, 'out') : [];
+      var lowPns = p.quantity > 0 ? flaggedPartNumbers(p, 'low') : [];
+      var pnWarning = outPns.length
+        ? '<div style="color:var(--red);font-size:.75rem;font-weight:700">' + esc(outPns.map(function (pn) { return pn.part_number; }).join(', ')) + ' out of stock</div>'
+        : lowPns.length
+          ? '<div style="color:var(--amber-dark);font-size:.75rem;font-weight:700">' + esc(lowPns.map(function (pn) { return pn.part_number; }).join(', ')) + ' low</div>'
+          : '';
       return '<div class="p-item' + (p.quantity === 0 ? ' p-out' : '') + '" data-id="' + p.id + '">' +
         '<img class="p-thumb" src="' + esc(p.image || '/assets/img/part-placeholder.svg') + '" alt="" loading="lazy">' +
         '<div class="p-info">' +
@@ -284,6 +301,7 @@
         '<div class="p-sub">' + esc(CATEGORIES[p.category] || p.category) +
         (p.brand ? ' · ' + esc(p.brand) : '') + (partNumbersText(p) ? ' · ' + esc(partNumbersText(p)) : '') + '</div>' +
         '<div class="p-price">' + priceRangeText(p) + '</div>' +
+        pnWarning +
         (showBranch ? '<div class="branch-badge">' + esc(p.branch_name) + '</div>' : '') +
         '</div>' +
         '<div class="p-right">' +
@@ -327,11 +345,17 @@
   });
 
   $('#product-list').addEventListener('click', function (e) {
-    var btn = e.target.closest('.sell-btn');
-    if (!btn || btn.disabled) return;
-    var id = btn.closest('.p-item').getAttribute('data-id');
+    var item = e.target.closest('.p-item');
+    if (!item) return;
+    var id = item.getAttribute('data-id');
     var product = products.find(function (p) { return p.id === id; });
-    if (product) openSellModal(product);
+    if (!product) return;
+    var sellBtn = e.target.closest('.sell-btn');
+    if (sellBtn) {
+      if (!sellBtn.disabled) openSellModal(product);
+      return;
+    }
+    openProductDetailModal(product);
   });
 
   // ---------- sell ----------
@@ -429,6 +453,50 @@
           loadProducts();
         });
     });
+  }
+
+  // ---------- product detail ----------
+  function openProductDetailModal(product) {
+    // Mirrors renderList()'s otherBranch check -- selling is only ever
+    // offered for a worker's own branch, same as the catalog card's Sell
+    // button / "visit that branch to sell" message.
+    var otherBranch = filters.branch !== '' && branches.length > 1 && product.branch_id !== myBranchId;
+    var modal = openModal(
+      '<h2>' + esc(product.name_en) + '</h2>' +
+      '<div class="sale-summary" style="display:flex;gap:1rem;align-items:flex-start;margin-bottom:.9rem">' +
+      '<img src="' + esc(product.image || '/assets/img/part-placeholder.svg') + '" alt="" style="width:90px;height:70px;object-fit:cover;border-radius:8px;flex-shrink:0">' +
+      '<div>' +
+      esc(CATEGORIES[product.category] || product.category) + (product.brand ? ' · ' + esc(product.brand) : '') + '<br>' +
+      'Total in stock: <b>' + product.quantity + '</b>' +
+      (product.branch_name ? ' · Branch: <b>' + esc(product.branch_name) + '</b>' : '') +
+      '</div></div>' +
+      '<div class="table-wrap"><table><thead><tr><th>Part Number</th><th class="num">Qty</th><th class="num">Price</th></tr></thead><tbody>' +
+      (product.part_numbers || []).map(function (pn) {
+        var cls = pn.quantity === 0 ? 'style="color:var(--red);font-weight:800"' : pn.quantity <= LOW_STOCK ? 'style="color:var(--amber-dark);font-weight:800"' : '';
+        return '<tr><td>' + esc(pn.part_number) +
+          (pn.quantity === 0 ? ' <span style="color:var(--red);font-size:.75rem;font-weight:700">(out of stock)</span>' : pn.quantity <= LOW_STOCK ? ' <span style="color:var(--amber-dark);font-size:.75rem;font-weight:700">(low)</span>' : '') +
+          '</td><td class="num" ' + cls + '>' + pn.quantity + '</td><td class="num">' + money(pn.price) + '</td></tr>';
+      }).join('') +
+      '</tbody></table></div>' +
+      (product.desc_en ? '<p class="cell-muted" style="margin-top:.8rem;white-space:pre-wrap">' + esc(product.desc_en) + '</p>' : '') +
+      '<div class="modal-actions" style="margin-top:1rem">' +
+      '<button type="button" class="btn btn-outline" id="detail-close">Close</button>' +
+      (product.quantity > 0 && !otherBranch
+        ? '<button type="button" class="btn btn-primary" id="detail-sell">Sell</button>'
+        : otherBranch
+          ? '<span class="cell-muted" style="align-self:center">View only — visit that branch to sell</span>'
+          : '') +
+      '</div>',
+      'modal-lg'
+    );
+    $('#detail-close', modal).addEventListener('click', closeModal);
+    var sellBtn = $('#detail-sell', modal);
+    if (sellBtn) {
+      sellBtn.addEventListener('click', function () {
+        closeModal();
+        openSellModal(product);
+      });
+    }
   }
 
   // ---------- add product (create-only: workers can add inventory, never edit/delete) ----------
