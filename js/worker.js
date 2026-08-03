@@ -37,6 +37,10 @@
   function partNumbersText(p) {
     return (p.part_numbers || []).map(function (pn) { return pn.part_number; }).join(', ');
   }
+  function priceRangeText(p) {
+    if (p.price_min == null) return '';
+    return p.price_min === p.price_max ? money(p.price_min) : money(p.price_min) + ' – ' + money(p.price_max);
+  }
   function timeOf(createdAt) {
     try {
       return new Date(String(createdAt).replace(' ', 'T') + 'Z')
@@ -261,8 +265,8 @@
     });
     var sorters = {
       'name': function (a, b) { return a.name_en.localeCompare(b.name_en); },
-      'price-low': function (a, b) { return a.price - b.price; },
-      'price-high': function (a, b) { return b.price - a.price; },
+      'price-low': function (a, b) { return a.price_min - b.price_min; },
+      'price-high': function (a, b) { return b.price_max - a.price_max; },
       'stock-low': function (a, b) { return a.quantity - b.quantity; },
       'stock-high': function (a, b) { return b.quantity - a.quantity; },
     };
@@ -279,7 +283,7 @@
         '<div class="p-name">' + esc(p.name_en) + '</div>' +
         '<div class="p-sub">' + esc(CATEGORIES[p.category] || p.category) +
         (p.brand ? ' · ' + esc(p.brand) : '') + (partNumbersText(p) ? ' · ' + esc(partNumbersText(p)) : '') + '</div>' +
-        '<div class="p-price">' + money(p.price) + '</div>' +
+        '<div class="p-price">' + priceRangeText(p) + '</div>' +
         (showBranch ? '<div class="branch-badge">' + esc(p.branch_name) + '</div>' : '') +
         '</div>' +
         '<div class="p-right">' +
@@ -335,29 +339,30 @@
   // worker enters the actual price sold at (pre-filled from the reference price).
   function openSellModal(product) {
     var pns = product.part_numbers || [];
-    var firstPn = pns[0] || { part_number: '', quantity: 0 };
+    var firstPn = pns[0] || { part_number: '', quantity: 0, price: 0 };
 
     var modal = openModal(
       '<h2>Record sale</h2>' +
       '<div class="sale-summary" style="margin-bottom:.9rem">' +
-      esc(product.name_en) + (product.brand ? ' · ' + esc(product.brand) : '') + '<br>' +
-      'Reference price: <b>' + money(product.price) + '</b></div>' +
+      esc(product.name_en) + (product.brand ? ' · ' + esc(product.brand) : '') +
+      '</div>' +
       '<form id="sell-form" class="form-grid">' +
       (pns.length > 1
         ? '<label>Part number<select name="part_number">' +
           pns.map(function (pn) {
-            return '<option value="' + esc(pn.part_number) + '">' + esc(pn.part_number) + ' (' + pn.quantity + ' in stock)</option>';
+            return '<option value="' + esc(pn.part_number) + '" data-price="' + pn.price + '">' +
+              esc(pn.part_number) + ' (' + pn.quantity + ' in stock, ' + money(pn.price) + ')</option>';
           }).join('') +
           '</select></label>'
-        : '<p class="cell-muted">Part number: <b>' + esc(firstPn.part_number) + '</b> · In stock: <b>' + firstPn.quantity + '</b></p>') +
+        : '<p class="cell-muted">Part number: <b>' + esc(firstPn.part_number) + '</b> · In stock: <b>' + firstPn.quantity + '</b> · Reference price: <b>' + money(firstPn.price) + '</b></p>') +
       '<label>Quantity sold' +
       '<div class="qty-row">' +
       '<button type="button" class="qty-btn" id="qty-minus">−</button>' +
       '<input name="quantity" type="number" min="1" max="' + firstPn.quantity + '" step="1" value="1" required>' +
       '<button type="button" class="qty-btn" id="qty-plus">＋</button>' +
       '</div></label>' +
-      '<label>Price sold at (FCFA)<input name="unit_price" type="number" min="0" step="1" value="' + product.price + '" required></label>' +
-      '<div class="sale-summary">Total: <strong id="sale-total">' + money(product.price) + '</strong></div>' +
+      '<label>Price sold at (FCFA)<input name="unit_price" type="number" min="0" step="1" value="' + firstPn.price + '" required></label>' +
+      '<div class="sale-summary">Total: <strong id="sale-total">' + money(firstPn.price) + '</strong></div>' +
       '<p class="form-error" id="sell-error" hidden></p>' +
       '<div class="modal-actions">' +
       '<button type="button" class="btn btn-outline" id="cancel-sell">Cancel</button>' +
@@ -368,10 +373,12 @@
     var qtyInput = modal.querySelector('input[name="quantity"]');
     var priceInput = modal.querySelector('input[name="unit_price"]');
     var pnSelect = modal.querySelector('select[name="part_number"]');
-    function currentAvailable() {
+    function currentPartNumber() {
       var wanted = pnSelect ? pnSelect.value : firstPn.part_number;
-      var match = pns.filter(function (pn) { return pn.part_number === wanted; })[0];
-      return match ? match.quantity : 0;
+      return pns.filter(function (pn) { return pn.part_number === wanted; })[0] || firstPn;
+    }
+    function currentAvailable() {
+      return currentPartNumber().quantity;
     }
     function updateTotal() {
       var available = currentAvailable();
@@ -381,9 +388,10 @@
     }
     if (pnSelect) {
       pnSelect.addEventListener('change', function () {
-        var available = currentAvailable();
-        qtyInput.max = available;
-        qtyInput.value = Math.min(Number(qtyInput.value) || 1, available || 1);
+        var chosen = currentPartNumber();
+        qtyInput.max = chosen.quantity;
+        qtyInput.value = Math.min(Number(qtyInput.value) || 1, chosen.quantity || 1);
+        priceInput.value = chosen.price; // pre-fill from the newly-selected part number's own price
         updateTotal();
       });
     }
@@ -443,8 +451,7 @@
       Object.keys(CATEGORIES).map(function (k) { return '<option value="' + k + '">' + CATEGORIES[k] + '</option>'; }).join('') +
       '</select></label>' +
       '<label>Brand<input name="brand"></label>' +
-      '<label>Price (FCFA) *<input name="price" type="number" min="0" step="1" required></label>' +
-      '<div><span style="display:block;font-size:.84rem;font-weight:700;color:var(--muted);margin-bottom:.3rem">Part Numbers *</span>' +
+      '<div><span style="display:block;font-size:.84rem;font-weight:700;color:var(--muted);margin-bottom:.3rem">Part Numbers, Quantity &amp; Price (FCFA) *</span>' +
       '<div id="part-number-rows"></div>' +
       '<button type="button" class="btn btn-outline btn-xs" id="add-part-number" style="margin-top:.4rem">＋ Add part number</button></div>' +
       '<label>Photo<input name="image" type="file" accept="image/jpeg,image/png,image/webp"></label>' +
@@ -464,6 +471,7 @@
       row.innerHTML =
         '<input type="text" class="pn-number" placeholder="Part number" required>' +
         '<input type="number" class="pn-quantity" min="0" step="1" placeholder="Qty" value="1" required>' +
+        '<input type="number" class="pn-price" min="0" step="1" placeholder="Price" required>' +
         '<button type="button" class="btn btn-outline btn-xs" data-remove-pn>✕</button>';
       row.querySelector('[data-remove-pn]').addEventListener('click', function () {
         if (pnWrap.children.length > 1) row.remove();
@@ -481,6 +489,7 @@
           return {
             part_number: row.querySelector('.pn-number').value.trim(),
             quantity: Number(row.querySelector('.pn-quantity').value) || 0,
+            price: Number(row.querySelector('.pn-price').value) || 0,
           };
         })
         .filter(function (pn) { return pn.part_number; });
@@ -498,7 +507,6 @@
           ['name_en', 'name_fr', 'name_zh', 'desc_en', 'desc_fr', 'desc_zh', 'category', 'brand'].forEach(function (k) {
             form.append(k, f[k].value);
           });
-          form.append('price', f.price.value);
           form.append('part_numbers', JSON.stringify(partNumbers));
           form.append('published', '1');
           if (image) form.append('image', image, f.image.files[0].name);
