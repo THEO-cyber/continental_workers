@@ -34,6 +34,9 @@
     });
   }
   function money(n) { return Number(n || 0).toLocaleString('fr-FR') + ' FCFA'; }
+  function partNumbersText(p) {
+    return (p.part_numbers || []).map(function (pn) { return pn.part_number; }).join(', ');
+  }
   function timeOf(createdAt) {
     try {
       return new Date(String(createdAt).replace(' ', 'T') + 'Z')
@@ -254,7 +257,7 @@
       if (filters.stock === 'low' && (p.quantity === 0 || p.quantity > LOW_STOCK)) return false;
       if (filters.stock === 'out' && p.quantity !== 0) return false;
       if (!q) return true;
-      return (p.name_en + ' ' + (p.name_fr || '') + ' ' + (p.brand || '') + ' ' + (p.sku || '')).toLowerCase().indexOf(q) !== -1;
+      return (p.name_en + ' ' + (p.name_fr || '') + ' ' + (p.brand || '') + ' ' + partNumbersText(p)).toLowerCase().indexOf(q) !== -1;
     });
     var sorters = {
       'name': function (a, b) { return a.name_en.localeCompare(b.name_en); },
@@ -275,7 +278,7 @@
         '<div class="p-info">' +
         '<div class="p-name">' + esc(p.name_en) + '</div>' +
         '<div class="p-sub">' + esc(CATEGORIES[p.category] || p.category) +
-        (p.brand ? ' · ' + esc(p.brand) : '') + (p.sku ? ' · ' + esc(p.sku) : '') + '</div>' +
+        (p.brand ? ' · ' + esc(p.brand) : '') + (partNumbersText(p) ? ' · ' + esc(partNumbersText(p)) : '') + '</div>' +
         '<div class="p-price">' + money(p.price) + '</div>' +
         (showBranch ? '<div class="branch-badge">' + esc(p.branch_name) + '</div>' : '') +
         '</div>' +
@@ -331,16 +334,26 @@
   // Price is not fixed per product — parts prices are negotiated/vary, so the
   // worker enters the actual price sold at (pre-filled from the reference price).
   function openSellModal(product) {
+    var pns = product.part_numbers || [];
+    var firstPn = pns[0] || { part_number: '', quantity: 0 };
+
     var modal = openModal(
       '<h2>Record sale</h2>' +
       '<div class="sale-summary" style="margin-bottom:.9rem">' +
       esc(product.name_en) + (product.brand ? ' · ' + esc(product.brand) : '') + '<br>' +
-      'Reference price: <b>' + money(product.price) + '</b> · In stock: <b>' + product.quantity + '</b></div>' +
+      'Reference price: <b>' + money(product.price) + '</b></div>' +
       '<form id="sell-form" class="form-grid">' +
+      (pns.length > 1
+        ? '<label>Part number<select name="part_number">' +
+          pns.map(function (pn) {
+            return '<option value="' + esc(pn.part_number) + '">' + esc(pn.part_number) + ' (' + pn.quantity + ' in stock)</option>';
+          }).join('') +
+          '</select></label>'
+        : '<p class="cell-muted">Part number: <b>' + esc(firstPn.part_number) + '</b> · In stock: <b>' + firstPn.quantity + '</b></p>') +
       '<label>Quantity sold' +
       '<div class="qty-row">' +
       '<button type="button" class="qty-btn" id="qty-minus">−</button>' +
-      '<input name="quantity" type="number" min="1" max="' + product.quantity + '" step="1" value="1" required>' +
+      '<input name="quantity" type="number" min="1" max="' + firstPn.quantity + '" step="1" value="1" required>' +
       '<button type="button" class="qty-btn" id="qty-plus">＋</button>' +
       '</div></label>' +
       '<label>Price sold at (FCFA)<input name="unit_price" type="number" min="0" step="1" value="' + product.price + '" required></label>' +
@@ -354,17 +367,32 @@
 
     var qtyInput = modal.querySelector('input[name="quantity"]');
     var priceInput = modal.querySelector('input[name="unit_price"]');
+    var pnSelect = modal.querySelector('select[name="part_number"]');
+    function currentAvailable() {
+      var wanted = pnSelect ? pnSelect.value : firstPn.part_number;
+      var match = pns.filter(function (pn) { return pn.part_number === wanted; })[0];
+      return match ? match.quantity : 0;
+    }
     function updateTotal() {
-      var q = Math.max(1, Math.min(product.quantity, Math.round(Number(qtyInput.value) || 1)));
+      var available = currentAvailable();
+      var q = Math.max(1, Math.min(available || 1, Math.round(Number(qtyInput.value) || 1)));
       var price = Math.max(0, Number(priceInput.value) || 0);
       $('#sale-total', modal).textContent = money(price * q);
+    }
+    if (pnSelect) {
+      pnSelect.addEventListener('change', function () {
+        var available = currentAvailable();
+        qtyInput.max = available;
+        qtyInput.value = Math.min(Number(qtyInput.value) || 1, available || 1);
+        updateTotal();
+      });
     }
     $('#qty-minus', modal).addEventListener('click', function () {
       qtyInput.value = Math.max(1, (Number(qtyInput.value) || 1) - 1);
       updateTotal();
     });
     $('#qty-plus', modal).addEventListener('click', function () {
-      qtyInput.value = Math.min(product.quantity, (Number(qtyInput.value) || 0) + 1);
+      qtyInput.value = Math.min(currentAvailable(), (Number(qtyInput.value) || 0) + 1);
       updateTotal();
     });
     qtyInput.addEventListener('input', updateTotal);
@@ -374,10 +402,11 @@
     $('#sell-form', modal).addEventListener('submit', function (e) {
       e.preventDefault();
       var f = e.target;
+      var partNumber = pnSelect ? pnSelect.value : firstPn.part_number;
       var quantity = Math.round(Number(qtyInput.value));
       var unitPrice = Math.round(Number(priceInput.value));
       withSpinner(f.querySelector('button[type="submit"]'), 'Recording…', function () {
-        return api('/api/sales', { method: 'POST', body: { product_id: product.id, quantity: quantity, unit_price: unitPrice } });
+        return api('/api/sales', { method: 'POST', body: { product_id: product.id, part_number: partNumber, quantity: quantity, unit_price: unitPrice } });
       })
         .then(function (res) {
           closeModal();
@@ -413,14 +442,11 @@
       '<label>Category<select name="category">' +
       Object.keys(CATEGORIES).map(function (k) { return '<option value="' + k + '">' + CATEGORIES[k] + '</option>'; }).join('') +
       '</select></label>' +
-      '<div class="qty-row" style="display:grid;grid-template-columns:1fr 1fr;gap:.7rem">' +
       '<label>Brand<input name="brand"></label>' +
-      '<label>SKU / Part No.<input name="sku"></label>' +
-      '</div>' +
-      '<div class="qty-row" style="display:grid;grid-template-columns:1fr 1fr;gap:.7rem">' +
       '<label>Price (FCFA) *<input name="price" type="number" min="0" step="1" required></label>' +
-      '<label>Quantity in stock *<input name="quantity" type="number" min="0" step="1" required value="1"></label>' +
-      '</div>' +
+      '<div><span style="display:block;font-size:.84rem;font-weight:700;color:var(--muted);margin-bottom:.3rem">Part Numbers *</span>' +
+      '<div id="part-number-rows"></div>' +
+      '<button type="button" class="btn btn-outline btn-xs" id="add-part-number" style="margin-top:.4rem">＋ Add part number</button></div>' +
       '<label>Photo<input name="image" type="file" accept="image/jpeg,image/png,image/webp"></label>' +
       '<p class="form-error" id="add-product-error" hidden></p>' +
       '<div class="modal-actions">' +
@@ -430,19 +456,50 @@
       'modal-lg'
     );
     $('#cancel-add-product', modal).addEventListener('click', closeModal);
+
+    var pnWrap = $('#part-number-rows', modal);
+    function addPartNumberRow() {
+      var row = document.createElement('div');
+      row.className = 'part-number-row';
+      row.innerHTML =
+        '<input type="text" class="pn-number" placeholder="Part number" required>' +
+        '<input type="number" class="pn-quantity" min="0" step="1" placeholder="Qty" value="1" required>' +
+        '<button type="button" class="btn btn-outline btn-xs" data-remove-pn>✕</button>';
+      row.querySelector('[data-remove-pn]').addEventListener('click', function () {
+        if (pnWrap.children.length > 1) row.remove();
+      });
+      pnWrap.appendChild(row);
+    }
+    addPartNumberRow();
+    $('#add-part-number', modal).addEventListener('click', addPartNumberRow);
+
     $('#add-product-form', modal).addEventListener('submit', function (e) {
       e.preventDefault();
       var f = e.target;
+      var partNumbers = Array.prototype.map
+        .call(pnWrap.querySelectorAll('.part-number-row'), function (row) {
+          return {
+            part_number: row.querySelector('.pn-number').value.trim(),
+            quantity: Number(row.querySelector('.pn-quantity').value) || 0,
+          };
+        })
+        .filter(function (pn) { return pn.part_number; });
+      if (!partNumbers.length) {
+        var errEl = $('#add-product-error', modal);
+        errEl.textContent = 'At least one part number is required';
+        errEl.hidden = false;
+        return;
+      }
       withSpinner(f.querySelector('button[type="submit"]'), 'Adding…', function () {
         return Promise.resolve(
           f.image.files[0] ? compressImage(f.image.files[0], 1600, 0.82) : null,
         ).then(function (image) {
           var form = new FormData();
-          ['name_en', 'name_fr', 'name_zh', 'desc_en', 'desc_fr', 'desc_zh', 'category', 'brand', 'sku'].forEach(function (k) {
+          ['name_en', 'name_fr', 'name_zh', 'desc_en', 'desc_fr', 'desc_zh', 'category', 'brand'].forEach(function (k) {
             form.append(k, f[k].value);
           });
           form.append('price', f.price.value);
-          form.append('quantity', f.quantity.value);
+          form.append('part_numbers', JSON.stringify(partNumbers));
           form.append('published', '1');
           if (image) form.append('image', image, f.image.files[0].name);
           return api('/api/admin/products', { method: 'POST', form: form });

@@ -169,6 +169,7 @@ fieldset.lang-set legend { font-size: .78rem; font-weight: 800; color: var(--nav
 .sale-summary strong { color: var(--green); font-size: 1.2rem; }
 .qty-row { display: flex; gap: .6rem; align-items: center; }
 .qty-row input { text-align: center; font-size: 1.3rem; font-weight: 800; }
+.part-number-row { display: grid; grid-template-columns: 1fr 90px 32px; gap: .5rem; align-items: center; margin-bottom: .5rem; }
 .qty-btn {
   width: 46px; height: 46px; border-radius: 10px; border: 1px solid var(--line);
   background: #fff; font-size: 1.4rem; font-weight: 800; color: var(--navy); flex: none;
