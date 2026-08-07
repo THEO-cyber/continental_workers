@@ -1,7 +1,7 @@
 {
   "name": "continental-workers",
   "private": true,
-  "description": "Continental Auto Parts — workers PWA (static site + a tiny Netlify Function for runtime config)",
+  "description": "Continental Automobile — workers PWA (static site + a tiny Netlify Function for runtime config)",
   "engines": {
     "node": ">=20"
   },
